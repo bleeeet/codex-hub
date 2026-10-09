@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""本地 Codex HUD：只保存统计值；面板随所属进程退出。"""
+"""本地 Codex Hub：只保存统计值；面板随所属进程退出。"""
 import argparse
 import datetime as dt
 import json
@@ -390,7 +390,7 @@ def hook():
                 pass
         start(argparse.Namespace(pane=pane, pid=pid, file=path, session=session))
     except (OSError, ValueError, KeyError, subprocess.SubprocessError):
-        print('bleet HUD 暂不可用，Codex 可继续运行。', file=sys.stderr)
+        print('Codex Hub 暂不可用，Codex 可继续运行。', file=sys.stderr)
 
 
 def launch():
@@ -404,7 +404,7 @@ def launch():
         subprocess.run([tmux_exe, '-V'], check=True, capture_output=True, timeout=2)
         SCRIPT.with_suffix('.tmux.conf').read_text()
     except (OSError, subprocess.SubprocessError):
-        print('bleet HUD 暂不可用，启动原生 Codex。', file=sys.stderr)
+        print('Codex Hub 暂不可用，启动原生 Codex。', file=sys.stderr)
         os.execvpe(codex, [codex, *args], dict(os.environ, BLEET_HUD='0'))
     name = 'codex-' + str(os.getpid())
     command = 'exec ' + shlex.join([codex, *args])
