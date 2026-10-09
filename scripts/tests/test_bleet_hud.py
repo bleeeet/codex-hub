@@ -226,7 +226,7 @@ class HudTests(unittest.TestCase):
         self.assertIn('上下文', lines[2])
         self.assertIn('Token 900.0K', lines[2])
         self.assertIn('缓存 50%', lines[2])
-        self.assertTrue(lines[3].startswith('⚙️  内存量'))
+        self.assertTrue(lines[3].startswith('⚙  内存量'))
         state['quotas'].append({'name': '5小时', 'left': 80, 'reset': 3600})
         with patch.object(self.hud.time, 'time', return_value=0):
             lines = self.hud.render(state, 160, None)
@@ -291,6 +291,11 @@ class HudTests(unittest.TestCase):
         lines = self.hud.render(self.snapshot(), 118, (125, 9*1024, 18*1024))
         starts = [self.hud.cells(row[:row.index('█')]) for row in (lines[1], lines[2], lines[3])]
         self.assertEqual(starts, [10, 10, 10])
+
+    def test_gear_has_no_emoji_width_variant(self):
+        line = self.hud.render(self.snapshot(), 118, (125, 9000, 18000))[-1]
+        self.assertTrue(line.startswith('⚙  内存量 '))
+        self.assertNotIn('\ufe0f', self.hud.paint_row(4, line, '36'))
 
     def test_memory_fields_stay_in_place_when_numbers_change(self):
         state = self.snapshot()
@@ -422,6 +427,13 @@ File-backed pages: 200.
         time.sleep(1)
         self.assertIn('bleet', tmux('capture-pane', '-p', '-t', hud_pane))
         self.assertEqual(tmux('display-message', '-p', '-t', hud_pane, '#{pane_height}'), '4')
+        for width, height in [(60, 50), (118, 30)]:
+            tmux('resize-window', '-t', 'test', '-x', str(width), '-y', str(height))
+            time.sleep(1.3)
+            self.assertEqual(tmux('display-message', '-p', '-t', hud_pane, '#{pane_height}'), '4')
+            screen = tmux('capture-pane', '-p', '-t', hud_pane)
+            self.assertIn('内存量', screen)
+            self.assertIn('上下文', screen)
         event = records()[-1]
         event['payload']['rate_limits']['secondary'] = {'window_minutes': 300, 'used_percent': 20}
         with self.path.open('a') as f:
@@ -435,7 +447,7 @@ File-backed pages: 200.
         self.assertIn('5H ', lines[2])
         self.assertIn('上下文', lines[3])
         self.assertIn('内存量', lines[4])
-        starts = [lines[i].replace('\ufe0f', '').index('█') for i in (1, 3, 4)]
+        starts = [self.hud.cells(lines[i][:lines[i].index('█')]) for i in (1, 3, 4)]
         self.assertEqual(len(set(starts)), 1)
         event['payload']['rate_limits']['secondary'] = None
         with self.path.open('a') as f:

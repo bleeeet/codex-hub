@@ -161,12 +161,12 @@ def render(state, width, memory):
     if state.get('error'):
         context = state['error'] + ' │ ' + context
     lines.append(context)
-    last = '⚙️  内存量 ' + '░' * bar_size + ' 已用 --% · --.-/ --GB │ Codex    --MB'
+    last = '⚙  内存量 ' + '░' * bar_size + ' 已用 --% · --.-/ --GB │ Codex    --MB'
     if memory:
         codex, used, total = memory
         pct = min(100, max(0, 100 * used / total))
         bar = '█' * round(pct * bar_size / 100) + '░' * (bar_size-round(pct * bar_size / 100))
-        last = f'⚙️  内存量 {bar} 已用{pct:3.0f}% · {used/1024:4.1f}/{total/1024:3.0f}GB │ Codex {codex:5.0f}MB'
+        last = f'⚙  内存量 {bar} 已用{pct:3.0f}% · {used/1024:4.1f}/{total/1024:3.0f}GB │ Codex {codex:5.0f}MB'
     lines.append(last)
     return [fit(line, max(1, width-1)) for line in lines]
 
@@ -174,7 +174,7 @@ def render(state, width, memory):
 def paint_row(row, line, color):
     """按绝对列定位，避免终端对 emoji 宽度的不同解释挤动字段。"""
     prefix = f'\x1b[{row};1H\x1b[2K\x1b[{color}m'
-    match = re.match(r'^(📊|🧠|⚙️)\s+(\S+)\s+(.*)$', line)
+    match = re.match(r'^(📊|🧠|⚙)\s+(\S+)\s+(.*)$', line)
     if match:
         emoji, label, value = match.groups()
         text = f'{emoji}\x1b[{row};4H{label}\x1b[{row};11H{value}'
@@ -456,6 +456,7 @@ def main():
     reader = Rollout(args.file or ROOT / 'sessions' / 'pending-session.jsonl', args.session)
     quota_checked = memory_checked = discovery_checked = float('-inf')
     snapshot, memory, quota_cache, previous_lines = None, None, {}, []
+    previous_size = None
     if args.command == 'watch' and sys.stdout.isatty():
         print('\x1b[?1049h\x1b[?25l', end='', flush=True)
     try:
@@ -492,7 +493,8 @@ def main():
                         reader.state['error'] = '额度数据暂不可用'
                     quota_checked = time.monotonic()
                 apply_account_limits(reader.state, snapshot)
-            width = shutil.get_terminal_size((118, 4)).columns
+            size = os.get_terminal_size(sys.stdout.fileno()) if sys.stdout.isatty() else os.terminal_size((118, 4))
+            width = size.columns
             if args.pid and time.monotonic() - memory_checked >= 5:
                 try:
                     memory = process_memory(args.pid)
@@ -504,13 +506,15 @@ def main():
                 print('\n'.join(lines))
                 return
             if sys.stdout.isatty():
-                if len(lines) != len(previous_lines):
-                    if os.environ.get('TMUX_PANE'):
+                if size != previous_size or len(lines) != len(previous_lines):
+                    if size.lines != len(lines) and os.environ.get('TMUX_PANE'):
                         try:
                             tmux('resize-pane', '-t', os.environ['TMUX_PANE'], '-y', str(len(lines)))
                         except (OSError, subprocess.SubprocessError):
                             pass
+                    previous_lines = []
                     print('\x1b[2J', end='')
+                previous_size = size
                 colors = ['36'] + ['32'] * (len(lines)-3) + ['33', '36']
                 for row, (color, line) in enumerate(zip(colors, lines), 1):
                     if len(previous_lines) == len(lines) and previous_lines[row-1] == line:

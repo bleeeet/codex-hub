@@ -164,3 +164,5 @@ docs/assets/              README 效果图
 布局思路参考 Codex/Claude 的终端 HUD；稳定性设计参考 [konnga/codex-hud](https://github.com/konnga/codex-hud) 的会话绑定、增量读取和降级方式。本项目为独立 Python 实现，没有复制其 TypeScript 源码。
 
 MIT License。与 OpenAI 无官方关联。
+
+底栏会在窗口缩放后恢复为 4～5 行并重画全部字段。内存齿轮使用单字符 `⚙`，避免 emoji 变体在局部刷新与整屏重绘时宽度不一致；数字字段仍使用固定宽度。
