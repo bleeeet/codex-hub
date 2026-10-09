@@ -161,7 +161,7 @@ def render(state, width, memory):
     if state.get('error'):
         context = state['error'] + ' │ ' + context
     lines.append(context)
-    last = '⚙️  内存量 等待数据'
+    last = '⚙️  内存量 ' + '░' * bar_size + ' 已用 --% · --.-/ --GB │ Codex    --MB'
     if memory:
         codex, used, total = memory
         pct = min(100, max(0, 100 * used / total))
@@ -169,6 +169,20 @@ def render(state, width, memory):
         last = f'⚙️  内存量 {bar} 已用{pct:3.0f}% · {used/1024:4.1f}/{total/1024:3.0f}GB │ Codex {codex:5.0f}MB'
     lines.append(last)
     return [fit(line, max(1, width-1)) for line in lines]
+
+
+def paint_row(row, line, color):
+    """按绝对列定位，避免终端对 emoji 宽度的不同解释挤动字段。"""
+    prefix = f'\x1b[{row};1H\x1b[2K\x1b[{color}m'
+    match = re.match(r'^(📊|🧠|⚙️)\s+(\S+)\s+(.*)$', line)
+    if match:
+        emoji, label, value = match.groups()
+        text = f'{emoji}\x1b[{row};4H{label}\x1b[{row};11H{value}'
+    elif line.startswith('5H '):
+        text = f'\x1b[{row};4H5H\x1b[{row};11H{line[2:].lstrip()}'
+    else:
+        text = line
+    return prefix + text + '\x1b[0m'
 
 
 def tmux(*args):
@@ -483,7 +497,7 @@ def main():
                 try:
                     memory = process_memory(args.pid)
                 except (OSError, ValueError, KeyError, subprocess.SubprocessError):
-                    memory = None
+                    pass  # 保留上次有效采样，不改变字段位置。
                 memory_checked = time.monotonic()
             lines = render(reader.state, width, memory)
             if args.command == 'once':
@@ -501,7 +515,7 @@ def main():
                 for row, (color, line) in enumerate(zip(colors, lines), 1):
                     if len(previous_lines) == len(lines) and previous_lines[row-1] == line:
                         continue
-                    print(f'\x1b[{row};1H\x1b[2K\x1b[{color}m{line}\x1b[0m', end='')
+                    print(paint_row(row, line, color), end='')
             else:
                 print('\n'.join(lines))
             previous_lines = lines

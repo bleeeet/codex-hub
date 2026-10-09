@@ -434,7 +434,9 @@ File-backed pages: 200.
         lines = tmux('capture-pane', '-p', '-t', hud_pane).splitlines()
         self.assertIn('5H ', lines[2])
         self.assertIn('上下文', lines[3])
-        self.assertIn('⚙️  内存量', lines[4])
+        self.assertIn('内存量', lines[4])
+        starts = [lines[i].replace('\ufe0f', '').index('█') for i in (1, 3, 4)]
+        self.assertEqual(len(set(starts)), 1)
         event['payload']['rate_limits']['secondary'] = None
         with self.path.open('a') as f:
             f.write(json.dumps(event)+'\n')
@@ -445,7 +447,7 @@ File-backed pages: 200.
             time.sleep(.1)
         output = tmux('capture-pane', '-p', '-t', hud_pane)
         self.assertNotIn('5H ', output)
-        self.assertIn('⚙️  内存量', output)
+        self.assertIn('内存量', output)
         tmux('set-option', '-p', '-t', pane, 'remain-on-exit', 'on')
         os.kill(int(pid), 15)
         deadline = time.monotonic() + 6
