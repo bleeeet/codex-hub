@@ -1,17 +1,17 @@
-# bleet HUD
+# Codex Hub
 
 **把 Codex 的上下文、额度和内存留在终端底部。**
 
 一个本地、轻量的 Codex CLI 状态栏：Python 标准库 + tmux，不修改官方 Codex 二进制。运行 `codex` 就出现，退出 Codex 或关闭窗口就停止。
 
-![bleet HUD 终端效果](docs/assets/terminal-preview.png)
+![Codex Hub 终端效果](docs/assets/terminal-preview.png)
 
 > 图片使用 `scripts/demo.py` 的合成数据。模型、项目、额度和内存都只是效果示例，不代表真实账号或账单。
 
 ## 它长什么样
 
 ```text
-gpt-6.1-sol · 中等推理 │ 📁 bleet-hud │ $100 │ Mac │ 45分钟
+gpt-6.1-sol · 中等推理 │ 📁 codex-hub │ $100 │ Mac │ 45分钟
 📊 周额度 ████░░░░░░ 剩余65% │ 5天7小时后重置 · 10/14 20:00
 5H       ██░░░░░░░░ 剩余80% │ 0天2小时后重置 · 10/09 15:00
 🧠 上下文 ████░░░░░░ 已用42% │ Token 2.40M │ 缓存 92%
@@ -49,8 +49,8 @@ codex login
 ## 安装：三步完成
 
 ```bash
-git clone https://github.com/bleeeet/bleet-hud.git
-cd bleet-hud
+git clone https://github.com/bleeeet/codex-hub.git
+cd codex-hub
 python3 scripts/install.py
 ```
 

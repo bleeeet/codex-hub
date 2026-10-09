@@ -1,4 +1,4 @@
-# bleet HUD
+# Codex Hub
 
 - 使用中文沟通；改动只围绕终端 HUD，不修改官方 Codex 二进制，不引入常驻服务。
 - 主程序在 `scripts/bleet-hud.py`，安装入口为 `scripts/install.py`。
