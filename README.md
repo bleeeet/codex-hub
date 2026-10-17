@@ -35,7 +35,7 @@ gpt-6.1-sol · 中等推理 │ 📁 codex-hub │ $100 │ Mac │ 45分钟
 ## 环境
 
 - **macOS**，Python 3.9+，tmux，zsh 或 bash。
-- 已安装并登录的 [官方 Codex CLI](https://github.com/openai/codex)。当前验证版本为 0.162.0。
+- 已安装并登录的 [官方 Codex CLI](https://github.com/openai/codex)。当前验证版本为 0.163.0。
 - HUD 本身没有 pip/npm 依赖，无需模型 API Key。Linux 的基础显示可尝试，但内存采样目前使用 macOS 命令，Linux 和 Windows 尚未完整验证。
 
 macOS 缺少依赖时，可使用 Homebrew：
@@ -123,6 +123,7 @@ python3 scripts/install.py --uninstall
 
 - 读取当前 Codex home 的本地会话 JSONL；`auth.json` 中的账号 ID 仅用于隔离额度快照，程序不发送凭据。
 - 恢复旧会话时，只读日志 SQLite 中的所属 PID/直接子进程映射；找不到可靠归属时保持等待，不借最近窗口的数据。
+- 共享 app-server 下没有 PID 映射时，匹配进程启动后一分钟内唯一的 TUI 会话；多个候选时继续等待。优先读取状态 SQLite 指向的当前日志，每五秒跟随同一会话的日志轮换，避免停在旧文件。
 - 不上传数据，不另存聊天副本，不启动独立常驻服务；仅随交互式 Codex 会话运行。
 - 上下文占用是最近一次 Token 数与窗口大小的近似比值；累计 Token 单独显示，不把累计数当作上下文。
 - 额度来自同账号日志中的最近快照，空闲时可能滞后；缺失数据不伪造，已过期快照撤下。
@@ -133,7 +134,7 @@ python3 scripts/install.py --uninstall
 
 **为什么没有 5H？** 当前日志未提供这一窗口，整行隐藏；并非自动认为额度用完。
 
-**为什么一直等待数据？** 确认 `CODEX_HOME` 对应当前会话，日志仍存在，SessionStart hooks 已启用。恢复旧会话时若没有进程映射或精确钩子，HUD 会保守等待。
+**为什么一直等待数据？** 确认 `CODEX_HOME` 对应当前会话，日志仍存在，SessionStart hooks 已启用。旧版本只匹配启动后15秒内的会话，并可能停在已轮换的旧日志；Codex 0.163.0 下遇到此问题，请更新并重载底栏。恢复旧会话时若没有进程映射、精确钩子或唯一启动匹配，HUD 会保守等待。
 
 **滚轮会影响聊天吗？** HUD 面板禁用滚轮。聊天区滚动由 tmux 处理；备用屏幕中的旧会话使用翻页键。
 

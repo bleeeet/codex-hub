@@ -250,6 +250,15 @@ def has_option(pane):
 
 
 def find_file(session):
+    # 共享 app-server 会轮换同一会话的日志；索引指向仍在写入的文件。
+    for database in sorted(ROOT.glob('state_*.sqlite'), key=lambda p: p.stat().st_mtime, reverse=True):
+        try:
+            with closing(sqlite3.connect(database.as_uri() + '?mode=ro', uri=True, timeout=.2)) as db:
+                row = db.execute('SELECT rollout_path FROM threads WHERE id = ?', (session,)).fetchone()
+            if row and Path(row[0]).is_file():
+                return Path(row[0])
+        except (OSError, ValueError, sqlite3.Error):
+            pass
     for folder in ('sessions', 'archived_sessions'):
         path = next((ROOT / folder).glob(f'**/*{session}*.jsonl'), None)
         if path:
@@ -285,20 +294,24 @@ def owner_session(pid):
                         return path, session
         except (OSError, ValueError, sqlite3.Error, subprocess.SubprocessError):
             pass
-    matches = []
-    for day in {dt.datetime.fromtimestamp(started + n).strftime('%Y/%m/%d') for n in (0, 15)}:
+    matches = {}
+    # 慢启动可能超过15秒；一分钟内仍要求会话唯一，不借其他窗口数据。
+    for day in {dt.datetime.fromtimestamp(started + n).strftime('%Y/%m/%d') for n in (0, 60)}:
         for path in (ROOT / 'sessions' / day).glob('*.jsonl'):
             try:
                 with path.open() as f:
                     meta = json.loads(f.readline()).get('payload', {})
             except (FileNotFoundError, ValueError):
                 continue
-            if meta.get('originator') != 'codex-tui' or not meta.get('timestamp'):
+            if meta.get('originator') != 'codex-tui' or isinstance(meta.get('source'), dict) or not meta.get('timestamp'):
                 continue
             stamp = dt.datetime.fromisoformat(meta['timestamp'].replace('Z', '+00:00')).timestamp()
-            if 0 <= stamp - started <= 15:
-                matches.append((path, meta.get('id') or meta['session_id']))
-    return matches[0] if len(matches) == 1 else None
+            if 0 <= stamp - started <= 60:
+                session = meta.get('id') or meta['session_id']
+                matches[session] = path
+    if len(matches) == 1:
+        session, path = next(iter(matches.items()))
+        return find_file(session) or path, session
 
 
 def latest_account_limits(cache=None):
@@ -463,9 +476,14 @@ def main():
         while args.command == 'once' or not args.pid or alive(args.pid):
             if args.file and not args.file.exists():
                 args.file = None
-            if not args.file and time.monotonic() - discovery_checked >= 5:
+            if time.monotonic() - discovery_checked >= 5:
                 discovery_checked = time.monotonic()
-                if args.pid:
+                if args.file:
+                    active = find_file(args.session)
+                    if active and active != args.file:
+                        args.file = active
+                        reader = Rollout(active, args.session)
+                elif args.pid:
                     try:
                         match = owner_session(args.pid)
                     except (OSError, ValueError, subprocess.SubprocessError):
@@ -474,7 +492,7 @@ def main():
                         args.file, args.session = match
                 if not args.file:
                     args.file = find_file(args.session)
-                if args.file:
+                if args.file and reader.path != args.file:
                     reader = Rollout(args.file, args.session)
             reader.state.pop('error', None)
             try:

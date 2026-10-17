@@ -27,7 +27,7 @@ def records(session='session-a', primary_minutes=10080):
                                       'output_tokens': 100000, 'total_tokens': 900000},
                 'last_token_usage': {'total_tokens': 25000}},
             'rate_limits': {'primary': {'used_percent': 6, 'window_minutes': primary_minutes,
-                                        'resets_at': 1792047077}, 'secondary': None,
+                                        'resets_at': int(time.time()) + 604800}, 'secondary': None,
                             'plan_type': 'prolite'}}}]
 
 
@@ -90,6 +90,44 @@ class HudTests(unittest.TestCase):
             db.commit()
         with patch.object(self.hud, 'ROOT', root), patch.object(self.hud, 'process_started', return_value=1791480212):
             self.assertEqual(self.hud.owner_session(123), (path, 'session-a'))
+
+    def test_find_file_follows_active_rollout_after_rotation(self):
+        root = Path(self.tmp.name)
+        folder = root / 'sessions'
+        folder.mkdir()
+        old = folder / 'rollout-session-a.jsonl'
+        old.write_bytes(self.path.read_bytes())
+        active = folder / 'rollout-session-a_rotated.jsonl'
+        active.write_bytes(self.path.read_bytes())
+        with closing(sqlite3.connect(root / 'state_5.sqlite')) as db:
+            db.execute('CREATE TABLE threads(id TEXT, rollout_path TEXT)')
+            db.execute('INSERT INTO threads VALUES (?, ?)', ('session-a', str(active)))
+            db.commit()
+        with patch.object(self.hud, 'ROOT', root):
+            self.assertEqual(self.hud.find_file('session-a'), active)
+            active.unlink()
+            self.assertEqual(self.hud.find_file('session-a'), old)
+
+    def test_owner_binds_delayed_session_to_active_rollout(self):
+        root = Path(self.tmp.name)
+        folder = root / 'sessions' / '2026/10/09'
+        folder.mkdir(parents=True)
+        meta = dict(id='mine', originator='codex-tui', source='vscode',
+                    timestamp='2026-10-09T01:23:48.500+08:00')
+        old = folder / 'rollout-mine.jsonl'
+        old.write_text(json.dumps(dict(payload=meta)) + '\n')
+        active = folder / 'rollout-mine_rotated.jsonl'
+        meta['timestamp'] = '2026-10-09T01:28:48+08:00'
+        active.write_text(json.dumps(dict(payload=meta)) + '\n')
+        with closing(sqlite3.connect(root / 'state_5.sqlite')) as db:
+            db.execute('CREATE TABLE threads(id TEXT, rollout_path TEXT)')
+            db.execute('INSERT INTO threads VALUES (?, ?)', ('mine', str(active)))
+            db.commit()
+        with patch.object(self.hud, 'ROOT', root), patch.object(self.hud, 'process_started', return_value=1791480212):
+            self.assertEqual(self.hud.owner_session(123), (active, 'mine'))
+            meta.update(id='other', timestamp='2026-10-09T01:23:55+08:00')
+            (folder / 'rollout-other.jsonl').write_text(json.dumps(dict(payload=meta)) + '\n')
+            self.assertIsNone(self.hud.owner_session(123))
 
     def test_missing_or_corrupt_auth_does_not_break_quota_reader(self):
         root = Path(self.tmp.name)
@@ -434,6 +472,21 @@ File-backed pages: 200.
             screen = tmux('capture-pane', '-p', '-t', hud_pane)
             self.assertIn('内存量', screen)
             self.assertIn('上下文', screen)
+        active = Path(self.tmp.name) / 'rotated.jsonl'
+        rows = records()
+        rows[-1]['payload']['info']['last_token_usage']['total_tokens'] = 55000
+        active.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+        with closing(sqlite3.connect(Path(self.tmp.name) / 'state_5.sqlite')) as db:
+            db.execute('CREATE TABLE threads(id TEXT, rollout_path TEXT)')
+            db.execute('INSERT INTO threads VALUES (?, ?)', ('session-a', str(active)))
+            db.commit()
+        deadline = time.monotonic() + 7
+        while time.monotonic() < deadline:
+            if '已用55%' in tmux('capture-pane', '-p', '-t', hud_pane):
+                break
+            time.sleep(.1)
+        self.assertIn('已用55%', tmux('capture-pane', '-p', '-t', hud_pane))
+        self.path = active
         event = records()[-1]
         event['payload']['rate_limits']['secondary'] = {'window_minutes': 300, 'used_percent': 20}
         with self.path.open('a') as f:
