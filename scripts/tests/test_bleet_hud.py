@@ -163,6 +163,30 @@ class HudTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('NATIVE --model test', result.stdout)
 
+    def test_tmux_requires_current_terminal_to_match_pane(self):
+        with patch.dict(os.environ, TMUX='/tmp/live,123,0', TMUX_PANE='%0'), \
+                patch.object(self.hud.os, 'ttyname', return_value='/dev/ttys011'), \
+                patch.object(self.hud.subprocess, 'check_output', return_value='/dev/ttys000\n'):
+            self.assertFalse(self.hud.inside_current_tmux())
+        with patch.dict(os.environ, TMUX='/tmp/live,123,0', TMUX_PANE='%0'), \
+                patch.object(self.hud.os, 'ttyname', return_value='/dev/ttys011'), \
+                patch.object(self.hud.subprocess, 'check_output', return_value='/dev/ttys011\n'):
+            self.assertTrue(self.hud.inside_current_tmux())
+
+    def test_launch_ignores_inherited_tmux_from_another_terminal(self):
+        root = Path(self.tmp.name)
+        for name, body in [('tmux', 'printf "TMUX %s\\n" "$*"'),
+                           ('codex', 'printf "NATIVE %s\\n" "$*"')]:
+            path = root/name
+            path.write_text('#!/bin/sh\n'+body+'\n')
+            path.chmod(0o755)
+        env = dict(os.environ, PATH=str(root), TMUX='/tmp/old-socket,123,0', TMUX_PANE='%0')
+        result = subprocess.run(['/usr/bin/python3', str(SCRIPT), 'launch', '--model', 'test'],
+            env=env, capture_output=True, text=True, timeout=5)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('new-session', result.stdout)
+        self.assertNotIn('NATIVE', result.stdout)
+
     def test_watch_survives_failed_memory_sampler_and_keeps_updating(self):
         root = Path(self.tmp.name)
         ps = root/'ps'

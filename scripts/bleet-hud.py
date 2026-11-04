@@ -420,12 +420,32 @@ def hook():
         print('Codex Hub 暂不可用，Codex 可继续运行。', file=sys.stderr)
 
 
+def inside_current_tmux():
+    """Orca 可能继承旧 TMUX；只有当前 TTY 确实属于该 pane 才算嵌套。"""
+    socket = os.environ.get('TMUX', '').rsplit(',', 2)[0]
+    pane = os.environ.get('TMUX_PANE')
+    if not socket or not pane:
+        return False
+    try:
+        tty = os.ttyname(sys.stdin.fileno())
+        pane_tty = subprocess.check_output([
+            shutil.which('tmux') or '/opt/homebrew/bin/tmux', '-S', socket,
+            'display-message', '-p', '-t', pane, '#{pane_tty}',
+        ], text=True, stderr=subprocess.DEVNULL, timeout=2).strip()
+        return tty == pane_tty
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return False
+
+
 def launch():
     """前台启动原生 Codex；关闭终端时销毁所属 tmux 会话。"""
     codex = shutil.which('codex')
     args = sys.argv[2:]
-    if os.environ.get('TMUX'):
+    if inside_current_tmux():
         os.execvpe(codex, [codex, *args], dict(os.environ, BLEET_HUD='1'))
+    # 清除宿主遗留变量，避免新面板与其他会话串线。
+    for key in ('TMUX', 'TMUX_PANE'):
+        os.environ.pop(key, None)
     tmux_exe = shutil.which('tmux') or '/opt/homebrew/bin/tmux'
     try:
         subprocess.run([tmux_exe, '-V'], check=True, capture_output=True, timeout=2)
